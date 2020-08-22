@@ -1,0 +1,57 @@
+---
+title: "lm_bilibili"
+author: "Zou Linzuo(Eden)"
+date: "January 14, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tinytex)
+library(knitr)
+library(tidyverse)
+library(ggplot2)
+library(evaluate)
+```
+
+
+# Import Data
+```{r cars}
+food <- read.csv('~/R/Data7012/results.csv',encoding = 'UTF-8')
+```
+
+
+# Regression without dummy variable
+```{r}
+# fit.spn: fit with senti_result + punc_result + num_of_numbers
+fit.spn <- lm(view ~ senti_result + punc_result + num_of_numbers + follows, data = food )
+summary(fit.spn)
+```
+# Normalize view and follows 
+```{r}
+# food2 is the data set with normalized views and followers
+view2 <- scale(food[,'view'],center=T,scale=T)
+follows2 <- scale(food[,'follows'])
+food2 <- food
+food2[,'view'] <- view2
+food2[,'follows'] <- follows2
+```
+
+# Regression with normalized view
+```{r}
+fit.spn2 <- lm(view ~ senti_result + punc_result + num_of_numbers + follows , data = food2 )
+summary(fit.spn2)
+```
+
+# Regression with dummy variable
+
+```{r}
+fit.spnq <- lm(view ~ senti_result + punc_result + num_of_numbers + as.factor(is_question) + follows, data = food)
+summary(fit.spnq)
+```
+
+```{r}
+fit.spnq2 <- lm(view ~ senti_result + punc_result + as.factor(is_question) + follows, data = food2)
+summary(fit.spnq2)
+```
+
+

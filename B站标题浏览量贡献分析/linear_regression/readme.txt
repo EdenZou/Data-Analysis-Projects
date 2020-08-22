@@ -1,0 +1,1 @@
+In this file, the R code will be used to do linear regression for this project.
