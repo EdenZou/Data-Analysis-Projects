@@ -1,0 +1,142 @@
+---
+title: "Feature Selection"
+author: "MSBA 7011 Group Assignment"
+date: "07/04/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if(!requireNamespace('Boruta'))install.packages('Boruta')
+if(!requireNamespace('caret'))install.packages('caret')
+if(!require('ROSE'))install.packages('ROSE')
+```
+
+## Data split 
+```{r}
+whole_data <- read.csv("whole_data.csv", sep = ",", header=T, as.is=T)
+# delete the date and na
+# since we can not use imputation on stock price forecasting
+# and we only forecasting on 20 day crisis when select features to avoid the affect from data processing 
+whole_data <- whole_data[,3:ncol(whole_data)]
+#split into training set and test set for feature selection 
+smp_size <- floor(0.75 * nrow(whole_data))
+set.seed(123)
+sample <- sample.int( n= nrow(whole_data), size = smp_size, replace = F)
+training_data <- whole_data[sample, ]
+```
+
+```{r}
+training_data <- na.omit(training_data)
+# set global crisis 20 as vector 
+training_data$Global.Crisis.20 <- as.factor(training_data$Global.Crisis.20)
+```
+
+## Boruta 
+```{r}
+library(Boruta)
+set.seed(111)
+boruta.bank_train <- Boruta(training_data$Global.Crisis.20~., data = training_data, doTrace = 2)
+print(boruta.bank_train)
+```
+
+```{r}
+boruta.variable <- getSelectedAttributes(boruta.bank_train, withTentative = F)
+write.csv(boruta.variable, file = "boruta.variable.csv")
+```
+
+## Lasso
+
+```{r}
+# Lasso 
+library(glmnet)
+'%ni%' <- Negate('%in%')
+
+x<-model.matrix(training_data$Global.Crisis.20~., data=training_data)
+x=x[,-1]
+
+glmnet1 <- cv.glmnet(x=x, y=training_data$Global.Crisis.20,family = "binomial", nfolds=5,alpha=.5)
+
+c<-coef(glmnet1,s='lambda.min',exact=TRUE)
+inds<-which(c!=0)
+variables<-row.names(c)[inds]
+variables<-variables[variables %ni% '(Intercept)']
+write.csv(variables, file = "lasso.variable.csv")
+```
+
+## Variable Importance 
+
+```{r}
+# employed qualitative criteria-driven method(Variable Importance from Machine Learning Algorithms)
+library(caret)
+VI.training_data <- training_data[,2:ncol(training_data)]
+colnames(VI.training_data) <- make.names(colnames(VI.training_data))
+set.seed(100)
+rPartMod <- train(x = VI.training_data[, names(VI.training_data) != "response"],
+    y =training_data$Global.Crisis.20,
+    method = "rpart",
+    parms = list(split = "information"))
+rpartImp <- varImp(rPartMod)
+write.csv(rpartImp$importance, file = "VI.variable.csv")
+```
+
+### feature selection
+
+```{r}
+feature.variable <- read.csv("sorted_variables.csv", sep = ",", header=T, as.is=T)
+```
+
+```{r}
+feature.sub <- subset(feature.variable, feature.variable$weight > 0.3)
+feature.name <- feature.sub$x
+```
+
+```{r}
+name_data <- read.csv("whole_data.csv", sep = ",", header=T, as.is=T)
+column.number <- c()
+for (name in feature.name) {
+num <- which(names(name_data) == name)
+column.number <- append(column.number, num)
+}
+column.number
+```
+
+### select required columns 
+
+```{r}
+# this is the whole data before imblanced processing 
+data_imblanced <- name_data[, c(1,2,3,column.number)]
+data_imblanced <- na.omit(data_imblanced)
+write.csv(data_imblanced, file = "whole_data_imblanced.csv")
+```
+
+```{r}
+# split into test data and train data 
+smp_size <- floor(0.85 * nrow(data_imblanced))
+set.seed(123)
+sample <- sample.int( n= nrow(data_imblanced), size = smp_size, replace = F)
+whole_train_data <- data_imblanced[sample, ]
+whole_test_data <- data_imblanced[-sample, ]
+write.csv(whole_train_data, file = "whole_train_data_imblanced.csv")
+write.csv(whole_test_data, file = "whole_test_data_imblanced.csv")
+```
+
+```{r}
+# produce the blanced train dataset based on global crisis.20 
+library(ROSE)
+whole_train_data_20 <- whole_train_data[,c(1,3:ncol(whole_train_data))]
+balanced.20 <- ovun.sample(Global.Crisis.20~ ., data=whole_train_data_20, method = "both", p = 0.5,seed = 123,N=3923)$data
+write.csv(balanced.20, file = "crisis20.balanced.csv")
+```
+
+```{r}
+# produce the blanced train dataset based on global crisis.nextday 
+library(ROSE)
+whole_train_data_nextday <- whole_train_data[,c(1,2,4:ncol(whole_train_data))]
+balanced.nextday <- ovun.sample(Global.Crisis~ ., data=whole_train_data_nextday, method = "both", p = 0.5,seed = 123,N=3923)$data
+write.csv(balanced.nextday, file = "crisis.nextday.balanced.csv")
+```
+
+
+
+
